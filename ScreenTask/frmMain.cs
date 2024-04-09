@@ -17,6 +17,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Xml.Serialization;
+using Microsoft.Win32; // Added for SessionSwitch event handling
 
 namespace ScreenTask
 {
@@ -46,6 +47,42 @@ namespace ScreenTask
             }
             comboScreens.SelectedIndex = 0;
             this.Text = $"Screen Task v{currentVersion.Major}.{currentVersion.Minor}";
+
+            // S'inscrire à l'événement SessionSwitch
+            SystemEvents.SessionSwitch += new SessionSwitchEventHandler(SystemEvents_SessionSwitch);
+        }
+
+        private void SystemEvents_SessionSwitch(object sender, SessionSwitchEventArgs e)
+        {
+            // Vérifiez si la session est verrouillée
+            if (e.Reason == SessionSwitchReason.SessionLock)
+            {
+                // Appeler la méthode pour arrêter le serveur
+                StopServer();
+            }
+            // Optionnel : Redémarrer le serveur lorsque la session est déverrouillée
+            else if (e.Reason == SessionSwitchReason.SessionUnlock)
+            {
+                // Appeler la méthode pour démarrer le serveur
+                StartServer();
+            }
+        }
+
+        private void StopServer()
+        {
+            if (serv.IsListening)
+            {
+                serv.Stop();
+                serv.Close();
+            }
+            isWorking = false;
+            // Mettre à jour l'interface utilisateur si nécessaire
+            Invoke((MethodInvoker)delegate
+            {
+                btnStartServer.Tag = "start";
+                btnStartServer.Text = "Start Server";
+                Log("Server Stopped due to session lock.");
+            });
         }
 
         private async void btnStartServer_Click(object sender, EventArgs e)
@@ -602,6 +639,13 @@ namespace ScreenTask
         private void cbAllowPublicAccess_CheckedChanged(object sender, EventArgs e)
         {
             _currentSettings.AllowPublicAccess = cbAllowPublicAccess.Checked;
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            base.OnFormClosing(e);
+            // Se désinscrire de l'événement SessionSwitch
+            SystemEvents.SessionSwitch -= SystemEvents_SessionSwitch;
         }
     }
 }
